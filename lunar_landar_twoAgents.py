@@ -28,6 +28,14 @@ class CollisionDetector(contactListener):
         pass
 
 
+MAIN_ENGINE_POWER = 13
+MAIN_ENGINE_Y_LOCATION = 4
+FPS = 50
+SCALE = 30.0
+SIDE_ENGINE_POWER = .6
+SIDE_ENGINE_AWAY = 12
+SIDE_ENGINE_HEIGHT = 14
+
 class SquareLunarLanderTwo(Env):
     metadata = {'render_modes': ['human', 'rgb_array'], 'render_fps': 50}
     
@@ -55,6 +63,8 @@ class SquareLunarLanderTwo(Env):
         self.ground_contact = False
 
         # Action and observation spaces
+        self.enable_wind = False
+        self.continuous = False
         self.action_space = spaces.Discrete(4)  # 0: No thrust, 1: Left, 2: Main, 3: Right
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(10,), dtype=np.float32)
         
@@ -91,7 +101,7 @@ class SquareLunarLanderTwo(Env):
             density=1,
             friction=0.3
         )
-        rocket1.inertia = 100
+        rocket1.inertia = 10
 
         rocket2 = self.world.CreateDynamicBody(position=(19, 27))
         rocket2.CreateFixture(
@@ -99,7 +109,7 @@ class SquareLunarLanderTwo(Env):
             density=1,
             friction=0.3
         )
-        rocket2.inertia = 100
+        rocket2.inertia = 10
         self.rockets = [rocket1, rocket2]
 
 
@@ -204,22 +214,134 @@ class SquareLunarLanderTwo(Env):
 
         velocity = rocket.linearVelocity.y
 
-        if action == 1:  # Left thrust
-            rocket.ApplyForce(b2Vec2(-200, 0), rocket.worldCenter-(0,1) , True)
-            self._update_flame_state(current_agent, "right")
 
-        elif action == 2:  # Main thrust (angle-dependent)
-            rocket.ApplyForceToCenter((0,300), True)
-            self._update_flame_state(current_agent, "main")
+        
 
-        elif action == 3:  # Right thrust
-            rocket.ApplyForce(b2Vec2(200, 0), rocket.worldCenter-(0,1) , True)
-            self._update_flame_state(current_agent, "left")
+        # Update wind and apply to the lander
+    
+        if self.enable_wind and not (
+            self.legs[0].ground_contact or self.legs[1].ground_contact
+        ):
+            # the function used for wind is tanh(sin(2 k x) + sin(pi k x)),
+            # which is proven to never be periodic, k = 0.01
+            wind_mag = (
+                math.tanh(
+                    math.sin(0.02 * self.wind_idx)
+                    + (math.sin(math.pi * 0.01 * self.wind_idx))
+                )
+                * self.wind_power
+            )
+            self.wind_idx += 1
+            rocket.ApplyForceToCenter(
+                (wind_mag, 0.0),
+                True,
+            )
+
+            # the function used for torque is tanh(sin(2 k x) + sin(pi k x)),
+            # which is proven to never be periodic, k = 0.01
+            torque_mag = (
+                math.tanh(
+                    math.sin(0.02 * self.torque_idx)
+                    + (math.sin(math.pi * 0.01 * self.torque_idx))
+                )
+                * self.turbulence_power
+            )
+            self.torque_idx += 1
+            rocket.ApplyTorque(
+                torque_mag,
+                True,
+            )
+
+        if self.continuous:
+            action = np.clip(action, -1, +1).astype(np.float64)
         else:
-            self._update_flame_state(current_agent, None)
+            assert self.action_space.contains(
+                action
+            ), f"{action!r} ({type(action)}) invalid "
+
+        # Apply Engine Impulses
+
+        # Tip is the (X and Y) components of the rotation of the lander.
+        tip = (math.sin(rocket.angle), math.cos(rocket.angle))
+
+        # Side is the (-Y and X) components of the rotation of the lander.
+        side = (-tip[1], tip[0])
+
+        # Generate two random numbers between -1/SCALE and 1/SCALE.
+        dispersion = [self.np_random.uniform(-1.0, +1.0) / SCALE for _ in range(2)]
+
+        m_power = 0.0
+        if (self.continuous and action[0] > 0.0) or (
+            not self.continuous and action == 2
+        ):
+            # Main engine
+            if self.continuous:
+                m_power = (np.clip(action[0], 0.0, 1.0) + 1.0) * 0.5  # 0.5..1.0
+                assert m_power >= 0.5 and m_power <= 1.0
+            else:
+                m_power = 1.0
+
+            # 4 is move a bit downwards, +-2 for randomness
+            # The components of the impulse to be applied by the main engine.
+            ox = (
+                tip[0] * (MAIN_ENGINE_Y_LOCATION / SCALE + 2 * dispersion[0])
+                + side[0] * dispersion[1]
+            )
+            oy = (
+                -tip[1] * (MAIN_ENGINE_Y_LOCATION / SCALE + 2 * dispersion[0])
+                - side[1] * dispersion[1]
+            )
+
+            impulse_pos = (rocket.position[0] + ox, rocket.position[1] + oy)
+
+            rocket.ApplyLinearImpulse(
+                (-ox * MAIN_ENGINE_POWER * m_power, -oy * MAIN_ENGINE_POWER * m_power),
+                impulse_pos,
+                True,
+            )
+
+        s_power = 0.0
+        if (self.continuous and np.abs(action[1]) > 0.5) or (
+            not self.continuous and action in [1, 3]
+        ):
+            # Orientation/Side engines
+            if self.continuous:
+                direction = np.sign(action[1])
+                s_power = np.clip(np.abs(action[1]), 0.5, 1.0)
+                assert s_power >= 0.5 and s_power <= 1.0
+            else:
+                # action = 1 is left, action = 3 is right
+                direction = action - 2
+                s_power = 1.0
+
+            # The components of the impulse to be applied by the side engines.
+            ox = tip[0] * dispersion[0] + side[0] * (
+                3 * dispersion[1] + direction * SIDE_ENGINE_AWAY / SCALE
+            )
+            oy = -tip[1] * dispersion[0] - side[1] * (
+                3 * dispersion[1] + direction * SIDE_ENGINE_AWAY / SCALE
+            )
+
+            # The constant 17 is a constant, that is presumably meant to be SIDE_ENGINE_HEIGHT.
+            # However, SIDE_ENGINE_HEIGHT is defined as 14
+            # This causes the position of the thrust on the body of the lander to change, depending on the orientation of the lander.
+            # This in turn results in an orientation dependent torque being applied to the lander.
+            impulse_pos = (
+                rocket.position[0] + ox - tip[0] * 17 / SCALE,
+                rocket.position[1] + oy + tip[1] * SIDE_ENGINE_HEIGHT / SCALE,
+            )
+ 
+            rocket.ApplyLinearImpulse(
+                (-ox * SIDE_ENGINE_POWER * s_power, -oy * SIDE_ENGINE_POWER * s_power),
+                impulse_pos,
+                True,
+            )
+
+        self.world.Step(1.0 / FPS, 6 * 30, 2 * 30)
         
-        self.world.Step(1/60, 6, 2)
-        
+
+
+
         obs = np.array([
             self.rockets[current_agent].position.x,
             self.rockets[current_agent].position.y,
