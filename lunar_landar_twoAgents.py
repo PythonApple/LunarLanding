@@ -11,20 +11,24 @@ class CollisionDetector(contactListener):
     def __init__(self, env):
         super().__init__()
         self.env = env
+        self.ground_contacts = [False, False]
     
     def BeginContact(self, contact):
-        # Check if rocket hit ground
         bodyA, bodyB = contact.fixtureA.body, contact.fixtureB.body
-        if (bodyA == self.env.rocket and bodyB == self.env.ground_body) or \
-           (bodyB == self.env.rocket and bodyA == self.env.ground_body):
-            self.env.ground_contact = True
-            
+
+        for i, rocket in enumerate(self.env.rockets):
+            if (bodyA == rocket and bodyB == self.env.ground_body) or \
+               (bodyB == rocket and bodyA == self.env.ground_body):
+                #self.ground_contacts[i] = True
+                pass
+        
 
     def EndContact(self, contact):
         # Optional: Track when contact ends
         pass
 
-class SquareLunarLander(Env):
+
+class SquareLunarLanderTwo(Env):
     metadata = {'render_modes': ['human', 'rgb_array'], 'render_fps': 50}
     
     # Screen dimensions (pixels)
@@ -42,29 +46,31 @@ class SquareLunarLander(Env):
     GROUND_WIDTH = 50  # meters (physics)
     GROUND_HEIGHT = 1  # meters (physics)
     
-    def __init__(self, render_mode=None):
+    def __init__(self, render_mode=None, num_agents=2):
+
+        self.num_agents = num_agents
+        self.rockets = []
 
         # Collision detection
         self.ground_contact = False
 
         # Action and observation spaces
-        self.action_space = spaces.Discrete(4)
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(8,), dtype=np.float32)
+        self.action_space = spaces.Discrete(4)  # 0: No thrust, 1: Left, 2: Main, 3: Right
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(10,), dtype=np.float32)
         
         # Physics world
         self.world = b2World(gravity=(0, -10))
         self.world.contactListener = CollisionDetector(self)
         self._create_world()
         self._generate_terrain()
-        
-        self.active_flame=None
 
         # Rendering
         self.render_mode = render_mode
         pygame.init()
         if self.render_mode is not None:
             pygame.display.set_mode((1,1), pygame.HIDDEN)
-            self.rocket_img = pygame.image.load("lunar1.png").convert_alpha()
+            self.rocket_img1 = pygame.image.load("Soviet.png").convert_alpha()
+            self.rocket_img2 = pygame.image.load("USA.png").convert_alpha()
             self.flame_img = pygame.image.load("flame.png").convert_alpha()
             self.flame_img = pygame.transform.scale(self.flame_img, (int(self.ROCKET_WIDTH * self.PIXELS_PER_METER), int(self.ROCKET_HEIGHT * self.PIXELS_PER_METER)))
             if self.render_mode == "human":
@@ -79,13 +85,24 @@ class SquareLunarLander(Env):
 
         """Create physics bodies with labeled dimensions"""
         # Rocket body (physics coordinates)
-        self.rocket = self.world.CreateDynamicBody(position=(0, 27))
-        self.rocket.CreateFixture(
+        rocket1 = self.world.CreateDynamicBody(position=(-19, 27))
+        rocket1.CreateFixture(
             shape=b2PolygonShape(box=(self.ROCKET_WIDTH/4, self.ROCKET_HEIGHT/4)),
             density=1,
             friction=0.3
         )
-        self.rocket.inertia = 10
+        rocket1.inertia = 100
+
+        rocket2 = self.world.CreateDynamicBody(position=(19, 27))
+        rocket2.CreateFixture(
+            shape=b2PolygonShape(box=(self.ROCKET_WIDTH/4, self.ROCKET_HEIGHT/4)),
+            density=1,
+            friction=0.3
+        )
+        rocket2.inertia = 100
+        self.rockets = [rocket1, rocket2]
+
+
         
         # Ground body (physics coordinates)
         self.ground = self.world.CreateStaticBody(position=(0, 0))
@@ -98,7 +115,7 @@ class SquareLunarLander(Env):
         
         # Terrain parameters
         num_points = 20
-        max_bump = 11  # meters
+        max_bump = 7  # meters
         segment_length = self.GROUND_WIDTH * 2 / num_points
         
         # Generate terrain vertices
@@ -106,7 +123,7 @@ class SquareLunarLander(Env):
         for i in range(num_points + 1):
             x = -self.GROUND_WIDTH + i * segment_length
             y = max_bump * (np.random.random()) if 0 < i < num_points else 1
-            if ( i >= 12 and i <=13):
+            if ( i  == 10):
                 y = 1
             vertices.append((x, y))
         
@@ -122,7 +139,7 @@ class SquareLunarLander(Env):
         self.ground_vertices = vertices
 
         # Flag
-        self.flag_position = (12, 3)
+        self.flag_position = (0, 3)
 
     def physics_to_screen(self, physics_x, physics_y):
         """Convert Box2D coordinates to screen coordinates."""
@@ -130,13 +147,15 @@ class SquareLunarLander(Env):
         screen_y = self.SCREEN_HEIGHT - (physics_y * self.PIXELS_PER_METER)
         return (int(screen_x), int(screen_y))
 
-    def _update_flame_state(self, direction):
-        if direction is None:
-            self.active_flame = None
+    def _update_flame_state(self, rocket_index, direction):
+        if direction is None or self.render_mode is None:
+            setattr(self, f'active_flame_{rocket_index}', None)
             return
+        
+        rocket = self.rockets[rocket_index]
             
         # Normalize angle to 0-6 range (where 3 is upside down)
-        normalized_angle = self.rocket.angle % 6.0
+        normalized_angle = rocket.angle % 6.0
         
         # Calculate base offsets (before rotation)
         if direction == "right":
@@ -165,64 +184,72 @@ class SquareLunarLander(Env):
         )
         
         # Calculate world position
-        flame_world_x = self.rocket.position.x + offset_x
-        flame_world_y = self.rocket.position.y + offset_y
+        flame_world_x = rocket.position.x + offset_x
+        flame_world_y = rocket.position.y + offset_y
         
         # Convert to screen coordinates and draw
         screen_pos = self.physics_to_screen(flame_world_x, flame_world_y)
         flame_rect = rotated_flame.get_rect(center=screen_pos)
-        self.active_flame = {
-            "rotated" : rotated_flame,
-            "rectangle" : flame_rect.topleft
-        }
+        setattr(self, f'active_flame_{rocket_index}', {
+            "rotated": rotated_flame,
+            "rectangle": flame_rect
+        })
 
-    def step(self, action):
+    def step(self, action, current_agent):
+        other_agent = 1 - current_agent
 
-        velocity = self.rocket.linearVelocity.y
+        self.world.contactListener.ground_contacts = [False, False]
+        
+        rocket = self.rockets[current_agent]
+
+        velocity = rocket.linearVelocity.y
 
         if action == 1:  # Left thrust
-            self.rocket.ApplyForce(b2Vec2(-200, 0), self.rocket.worldCenter-(0,1) , True)
-            self._update_flame_state("right")
+            rocket.ApplyForce(b2Vec2(-200, 0), rocket.worldCenter-(0,1) , True)
+            self._update_flame_state(current_agent, "right")
 
         elif action == 2:  # Main thrust (angle-dependent)
-            self.rocket.ApplyForceToCenter((0,300), True)
-            self._update_flame_state("main")
+            rocket.ApplyForceToCenter((0,300), True)
+            self._update_flame_state(current_agent, "main")
 
         elif action == 3:  # Right thrust
-            self.rocket.ApplyForce(b2Vec2(200, 0), self.rocket.worldCenter-(0,1) , True)
-            self._update_flame_state("left")
+            rocket.ApplyForce(b2Vec2(200, 0), rocket.worldCenter-(0,1) , True)
+            self._update_flame_state(current_agent, "left")
         else:
-            self._update_flame_state(None)
+            self._update_flame_state(current_agent, None)
         
         self.world.Step(1/60, 6, 2)
         
-        # Get observation (unchanged)
         obs = np.array([
-            self.rocket.position.x,
-            self.rocket.position.y,
-            self.rocket.linearVelocity.x,
-            self.rocket.linearVelocity.y,
-            self.rocket.angle,
-            self.rocket.angularVelocity,
-            0, 0
+            self.rockets[current_agent].position.x,
+            self.rockets[current_agent].position.y,
+            self.rockets[current_agent].linearVelocity.x,
+            self.rockets[current_agent].linearVelocity.y,
+            self.rockets[current_agent].angle,
+            self.rockets[other_agent].position.x,
+            self.rockets[other_agent].position.y,
+            self.rockets[other_agent].linearVelocity.x,
+            self.rockets[other_agent].linearVelocity.y,
+            self.rockets[other_agent].angle,
         ], dtype=np.float32)
-        
+       
         done = False
         reward = -0.1
-        reward -= min(abs(self.rocket.position.x - 12) * 0.1, 5)
+        reward -= min(abs(self.rockets[current_agent].position.x - 0) * 0.1, 5)
 
-        if self.ground_contact:
+        if self.world.contactListener.ground_contacts[current_agent]:
             reward += 150
             reward -= abs(velocity) * 4 
-            reward -= abs(self.rocket.angle-6) * 5
+            reward -= abs(rocket.angle-6) * 5
             done = True
-        elif abs(self.rocket.position.x) > 25:
+        elif abs(rocket.position.x) > 30:
             reward = -100
             done = True
-        elif (self.rocket.position.y) > 30:
+          
+        elif (rocket.position.y) > 35:
             reward = -100
             done = True
-            
+      
         #print(f"reward: {reward:.2f}")
         return obs, reward, done, False, {}
 
@@ -270,15 +297,23 @@ class SquareLunarLander(Env):
                 (flag_pos[0]+30, flag_pos[1]-20),
                 (flag_pos[0], flag_pos[1])]
             )
-            if self.active_flame is not None:
-                self.screen.blit(self.active_flame["rotated"], self.active_flame["rectangle"])
+            if hasattr(self, 'active_flame_0') and self.active_flame_0:
+                self.screen.blit(self.active_flame_0["rotated"], self.active_flame_0["rectangle"])
+            if hasattr(self, 'active_flame_1') and self.active_flame_1:
+                self.screen.blit(self.active_flame_1["rotated"], self.active_flame_1["rectangle"])
             
             # Draw rocket
-            self.rocket_img = pygame.transform.scale(self.rocket_img, (int(self.ROCKET_WIDTH * self.PIXELS_PER_METER), int(self.ROCKET_HEIGHT * self.PIXELS_PER_METER)))
+            self.rocket_img1 = pygame.transform.scale(self.rocket_img1, (int(self.ROCKET_WIDTH * self.PIXELS_PER_METER), int(self.ROCKET_HEIGHT * self.PIXELS_PER_METER)))
+            self.rocket_img2 = pygame.transform.scale(self.rocket_img2, (int(self.ROCKET_WIDTH * self.PIXELS_PER_METER), int(self.ROCKET_HEIGHT * self.PIXELS_PER_METER)))
             # Rotate the rocket image based on its angle
-            rotated_img = pygame.transform.rotate(self.rocket_img, -np.degrees(self.rocket.angle))
-            img_rect = rotated_img.get_rect(center=self.physics_to_screen(self.rocket.position.x, self.rocket.position.y))
-            self.screen.blit(rotated_img, img_rect.topleft)
+            rotated_img1 = pygame.transform.rotate(self.rocket_img1, -np.degrees(self.rockets[0].angle))
+            img_rect1 = rotated_img1.get_rect(center=self.physics_to_screen(self.rockets[0].position.x, self.rockets[0].position.y))
+            self.screen.blit(rotated_img1, img_rect1.topleft)
+
+            rotated_img2 = pygame.transform.rotate(self.rocket_img2, -np.degrees(self.rockets[1].angle))
+            img_rect2 = rotated_img2.get_rect(center=self.physics_to_screen(self.rockets[1].position.x, self.rockets[1].position.y))
+            self.screen.blit(rotated_img2, img_rect2.topleft)
+
 
             
             
@@ -291,14 +326,23 @@ class SquareLunarLander(Env):
 
 
     def reset(self, seed=None, options=None):
-        self.ground_contact = False
-        if hasattr(self, 'rocket'):
-            self.world.DestroyBody(self.rocket)
-        if hasattr(self, 'ground_body'):  
+        # Destroy all existing rockets
+        if hasattr(self, 'rockets'):
+            for rocket in self.rockets:
+                if rocket and rocket in self.world.bodies:  # Safety check
+                    self.world.DestroyBody(rocket)
+            self.rockets.clear()  # Empty the list
+        
+        # Destroy ground body if it exists
+        if hasattr(self, 'ground_body') and self.ground_body in self.world.bodies:
             self.world.DestroyBody(self.ground_body)
-        self._create_world()
+        
+        # Recreate the world
+        self._create_world()  # This should repopulate self.rockets
         self._generate_terrain()
-        return np.zeros(8, dtype=np.float32), {}
+        
+        return np.zeros(10, dtype=np.float32), {}
+
 
     def close(self):
         if self.screen is not None:
@@ -307,6 +351,6 @@ class SquareLunarLander(Env):
 # Registration
 from gymnasium.envs.registration import register
 register(
-    id='SquareLunarLander-v0',
+    id='SquareLunarLander-twoAgents-v0',
     entry_point='square_lunar_lander:SquareLunarLander',
 )
