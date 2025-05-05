@@ -1,53 +1,70 @@
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
-from lunar_landar_twoAgents import SquareLunarLanderTwo
+from GymLunarLander import GymLunarLander
 import gymnasium as gym
 from gymnasium.wrappers import RecordVideo
+from gymnasium.envs.registration import register
+from gymnasium.wrappers import TimeLimit
 
 
 class CompetitiveEnvWrapper(gym.Wrapper):
     def __init__(self, env):
         super().__init__(env)
         self.env = env
-        self.current_agent = None  # Track which agent is currently acting
+        self.agents = []
+        self.current_agent = 1
+    
+
+    def add_agent(self, agent):
+        self.agents.append(agent)
     
     def reset(self, seed = None, options = None):
         obs = self.env.reset()
-        self.current_agent = 0  # Start with agent 0
         return obs
+    
+    def swap_agent(self):
+        self.current_agent = 1 - self.current_agent
     
     def step(self, action):
         # The environment needs to know which agent is taking the action
-        obs, reward, done, truncated, info = self.env.step(action, self.current_agent)
+        current_obs, reward, done, truncated, info = self.env.step(action, self.current_agent)
+       
+        # Opponents move
+        opponent = 1-self.current_agent
+        opponent_obs, _, _, _, _ = self.env.step(0,opponent)
+        opponent_action = self.agents[opponent].predict(opponent_obs)[0]
+        self.env.step(opponent_action, opponent)
         
-        # Switch agents for next step
-        self.current_agent = 1 if self.current_agent == 0 else 0
-        
-        return obs, reward, done, truncated, info
+        return current_obs, reward, done, truncated, info
 
-# Original environment
-base_env = SquareLunarLanderTwo(render_mode="rgb_array")
-# Wrapped environment
-env = CompetitiveEnvWrapper(base_env)
+base_env = GymLunarLander(render_mode="rgb_array")
+CompEnv = CompetitiveEnvWrapper(base_env)
+timelimit_env = TimeLimit(CompEnv, max_episode_steps=1000)  # 1000 steps per episode
 
 env = RecordVideo(
-    env,
-    video_folder="./videos",  # Where to save videos
-    episode_trigger=lambda x: x % 1000 == 0,  # Record every 100 episodes
+    timelimit_env,
+    video_folder="./videos",
+    episode_trigger=lambda x: x % 100 == 0,  # Record every 100 episodes
     disable_logger=True
 )
 
-agent1 = PPO("MlpPolicy", env, verbose=1, policy_kwargs=dict(net_arch=[64, 64]))
-agent2 = PPO("MlpPolicy", env, verbose=1, policy_kwargs=dict(net_arch=[64, 64]))
+
+agent1 = PPO("MlpPolicy", env, verbose=1)
+agent2 = PPO("MlpPolicy", env, verbose=1)
+
+
+CompEnv.add_agent(agent1)
+CompEnv.add_agent(agent2)
+
+
 
 # Training loop
 for iteration in range(10000):
-    # Train Agent 0 (freeze Agent 1)
-    env.current_agent = 0
-    agent1.learn(total_timesteps=1, reset_num_timesteps=False)
-    
-    # Train Agent 1 (freeze Agent 0)
-    env.current_agent = 1
-    agent2.learn(total_timesteps=1, reset_num_timesteps=False)
 
-    print(f"Iteration {iteration + 1} completed.")
+    agent1.learn(total_timesteps=10000, reset_num_timesteps=False)
+    CompEnv.swap_agent()
+    agent2.learn(total_timesteps=10000, reset_num_timesteps=False)
+    CompEnv.swap_agent()
+
+    print(f"Iteration {iteration + 1} complete.")
+print("Training complete.")

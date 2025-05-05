@@ -9,8 +9,8 @@ screen = pygame.display.set_mode((800, 600))
 pygame.display.set_caption("Lunar Lander - Two Agents")
 
 # Create the environment
-from lunar_landar_twoAgents import SquareLunarLanderTwo
-env = SquareLunarLanderTwo(render_mode="human")
+from GymLunarLander import GymLunarLander
+env = GymLunarLander(render_mode="human")
 raw_env = env.unwrapped  # Bypass Gymnasium's wrappers
 
 try:
@@ -42,7 +42,9 @@ try:
         elif keys[pygame.K_RIGHT]: action0 = 3
         
         # Step the environment with BOTH actions
-        obs, reward, done, truncated, info = raw_env.step(action0,0)
+        obs, reward, done, truncated, info = raw_env.step(action0, 1)
+        obs, reward, done, truncated, info = raw_env.step(0, 0)
+        #print(f"reward: {reward}")
         raw_env.render()
         
         if done:

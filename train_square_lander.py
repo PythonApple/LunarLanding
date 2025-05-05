@@ -5,7 +5,7 @@ from gymnasium.wrappers import RecordVideo
 
 
 # Create environment
-env = gym.make("SquareLunarLander-v0", render_mode="rgb_array")  # Disable rendering during training
+env = gym.make("LunarLander-v3", render_mode="rgb_array")  # Disable rendering during training
 
 env = RecordVideo(
     env,
