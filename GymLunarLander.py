@@ -35,8 +35,8 @@ if TYPE_CHECKING:
 FPS = 50
 SCALE = 30.0  # affects how fast-paced the game is, forces should be adjusted as well
 
-MAIN_ENGINE_POWER = 26.0
-SIDE_ENGINE_POWER = 1.2
+MAIN_ENGINE_POWER = 52.0
+SIDE_ENGINE_POWER = 2.4
 
 INITIAL_RANDOM = 1000.0  # Set 1500 to make game harder
 
@@ -70,7 +70,7 @@ class ContactDetector(contactListener):
             if (lander == bodyA and bodyB == self.env.moon) or \
                (lander == bodyB and bodyA == self.env.moon):
                 self.env.agent_crashed[index] = True 
-                #pass
+             
         
         # Check for leg-moon contacts
         for lander_legs in self.env.legs:
@@ -256,6 +256,7 @@ class GymLunarLander(gym.Env, EzPickle):
         self.landers = []
         self.legs = []
         self.particles = []
+        self.rockets = []
         self.dones = [False ,False]
         self.agent_crashed = [False, False]
         self.shapings = [None, None]
@@ -297,9 +298,9 @@ class GymLunarLander(gym.Env, EzPickle):
         ).astype(np.float32)
 
         # useful range is -1 .. +1, but spikes can be higher
-        self.observation_space = spaces.Box(low, high)
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(16,), dtype=np.float32)
 
-        self.action_space = spaces.Discrete(4)
+        self.action_space = spaces.Discrete(5)
 
         self.render_mode = render_mode
 
@@ -319,6 +320,8 @@ class GymLunarLander(gym.Env, EzPickle):
         self.world.DestroyBody(self.legs[1][0])
         self.world.DestroyBody(self.legs[1][1])
         self.legs = []
+        self.rockets = []
+    
 
     def reset(
         self,
@@ -489,17 +492,39 @@ class GymLunarLander(gym.Env, EzPickle):
     def _clean_particles(self, all_particle):
         while self.particles and (all_particle or self.particles[0].ttl < 0):
             self.world.DestroyBody(self.particles.pop(0))
+        while self.rockets and (all_particle or self.rockets[0].ttl < 0):
+            self.world.DestroyBody(self.rockets.pop(0))
+
+    def _create_rocket(self, x, y, angle, speed=50.0): 
+
+        triangle_vertices = [
+            (-9/SCALE,0),
+            (3/SCALE, -6/SCALE),  # Bottom right
+            (3/SCALE, 6/SCALE)   # Top right
+        ]
+        vx = math.cos(angle) * speed
+        vy = math.sin(angle) * speed
+        rocket = self.world.CreateDynamicBody(
+            position = (x, y),
+            angle=angle,
+            linearVelocity = (vx, vy),
+            fixtures = fixtureDef(
+                shape = polygonShape(vertices = triangle_vertices),
+                density = 1.0,
+            ),
+        )
+        rocket.ttl= 15
+        rocket.is_rocket = True
+        rocket.is_triangle = True
+        self.rockets.append(rocket)
+
 
     def step(self, action, curr_agent):
+        opp_agent = 1 - curr_agent
         lander = self.landers[curr_agent]
-        assert lander is not None
 
         # Update wind and apply to the lander
         assert lander is not None, "You forgot to call reset()"
-
-        assert self.action_space.contains(
-            action
-        ), f"{action!r} ({type(action)}) invalid "
 
         # Apply Engine Impulses
 
@@ -511,6 +536,11 @@ class GymLunarLander(gym.Env, EzPickle):
 
         # Generate two random numbers between -1/SCALE and 1/SCALE.
         dispersion = [self.np_random.uniform(-1.0, +1.0) / SCALE for _ in range(2)]
+
+        if (curr_agent == 1):
+            if (action == 4):
+                self._create_rocket(lander.position.x, lander.position.y, lander.angle + 3, speed=50.0)
+
 
         m_power = 0.0
         if (action == 2):
@@ -598,45 +628,60 @@ class GymLunarLander(gym.Env, EzPickle):
         vel = lander.linearVelocity
 
         state = [
-            (pos.x - VIEWPORT_W / SCALE / 2) / (VIEWPORT_W / SCALE / 2),
-            (pos.y - (self.helipad_y + LEG_DOWN / SCALE)) / (VIEWPORT_H / SCALE / 2),
-            vel.x * (VIEWPORT_W / SCALE / 2) / FPS,
-            vel.y * (VIEWPORT_H / SCALE / 2) / FPS,
-            lander.angle,
-            20.0 * lander.angularVelocity / FPS,
-            1.0 if self.legs[curr_agent][0].ground_contact else 0.0,
-            1.0 if self.legs[curr_agent][1].ground_contact else 0.0,
+            (self.landers[0].position.x - VIEWPORT_W / SCALE / 2) / (VIEWPORT_W / SCALE / 2),
+            (self.landers[0].position.y - (self.helipad_y + LEG_DOWN / SCALE)) / (VIEWPORT_H / SCALE / 2),
+            self.landers[0].linearVelocity.x * (VIEWPORT_W / SCALE / 2) / FPS,
+            self.landers[0].linearVelocity.y * (VIEWPORT_H / SCALE / 2) / FPS,
+            self.landers[0].angle,
+            20.0 * self.landers[0].angularVelocity / FPS,
+            1.0 if self.legs[0][0].ground_contact else 0.0,
+            1.0 if self.legs[0][1].ground_contact else 0.0,
+
+            (self.landers[1].position.x - VIEWPORT_W / SCALE / 2) / (VIEWPORT_W / SCALE / 2),
+            (self.landers[1].position.y - (self.helipad_y + LEG_DOWN / SCALE)) / (VIEWPORT_H / SCALE / 2),
+            self.landers[1].linearVelocity.x * (VIEWPORT_W / SCALE / 2) / FPS,
+            self.landers[1].linearVelocity.y * (VIEWPORT_H / SCALE / 2) / FPS,
+            self.landers[1].angle,
+            20.0 * self.landers[1].angularVelocity / FPS,
+            1.0 if self.legs[1][0].ground_contact else 0.0,
+            1.0 if self.legs[1][1].ground_contact else 0.0
         ]
-        assert len(state) == 8
+        assert len(state) == 16
 
         reward = 0
-        shaping = (
-            -100 * np.sqrt(state[0] * state[0] + state[1] * state[1])
-            - 100 * np.sqrt(state[2] * state[2] + state[3] * state[3])
-            - 100 * abs(state[4])
-            + 10 * state[6]
-            + 10 * state[7]
-        )  # And ten points for legs contact, the idea is if you
-        # lose contact again after landing, you get negative reward
-        if self.shapings[curr_agent] is not None:
-            reward = shaping - self.shapings[curr_agent]
-        self.shapings[curr_agent] = shaping
+        if curr_agent == 0:
+            shaping = (
+                -100 * np.sqrt(state[0] * state[0] + state[1] * state[1])
+                - 100 * np.sqrt(state[2] * state[2] + state[3] * state[3])
+                - 100 * abs(state[4])
+                + 10 * state[6]
+                + 10 * state[7]
+            )  # And ten points for legs contact, the idea is if you
+            # lose contact again after landing, you get negative reward
+            if self.shapings[curr_agent] is not None:
+                reward = shaping - self.shapings[curr_agent]
+            self.shapings[curr_agent] = shaping
 
-        reward -= (
-            m_power * 0.30
-        )  # less fuel spent is better, about -30 for heuristic landing
-        reward -= s_power * 0.03
+            reward -= (
+                m_power * 0.30
+            )  # less fuel spent is better, about -30 for heuristic landing
+            reward -= s_power * 0.03
+            if not lander.awake:
+                self.dones[curr_agent] = True
+                reward += 100
 
-        terminated = False
-        if self.agent_crashed[curr_agent] or abs(state[0]) >= 1.0:
+        if curr_agent == 1:
+            offset = 8
+        else:
+            offset = 0
+
+        if self.agent_crashed[curr_agent] or abs(state[0 + offset]) >= 1.0 or abs(state[1 + offset]) >= 1.6:
             self.dones[curr_agent] = True
             reward -= 100
-        if not lander.awake:
-            self.dones[curr_agent] = True
-            reward += 100
-
-        terminated = self.dones[0] and self.dones[1]
-        #print(f"Agent1 Status: {self.dones[0]}, Agent2 Status: {self.dones[1]}")
+        
+        terminated = False
+        terminated = self.dones[0] 
+        
 
         if self.render_mode == "human":
             self.render()
@@ -685,6 +730,9 @@ class GymLunarLander(gym.Env, EzPickle):
                 int(max(0.2, 0.5 * obj.ttl) * 255),
                 int(max(0.2, 0.5 * obj.ttl) * 255),
             )
+
+        for obj in self.rockets:
+            obj.ttl -= 0.15
 
         self._clean_particles(False)
 
@@ -745,6 +793,14 @@ class GymLunarLander(gym.Env, EzPickle):
                         [(x, flagy2), (x, flagy2 - 10), (x + 25, flagy2 - 5)],
                         (204, 204, 0),
                     )
+
+        for rocket in self.rockets:
+            if hasattr(rocket, 'is_triangle'):
+                vertices = [rocket.GetWorldPoint(vertex)
+                            for vertex in rocket.fixtures[0].shape.vertices
+                            ]
+                screen_vertices = [(v[0] * SCALE, v[1] * SCALE) for v in vertices]
+                pygame.draw.polygon(self.surf, (255, 100, 0), screen_vertices)
 
         self.surf = pygame.transform.flip(self.surf, False, True)
 

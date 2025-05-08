@@ -40,11 +40,14 @@ try:
         if keys[pygame.K_LEFT]: action0 = 1
         elif keys[pygame.K_UP]: action0 = 2
         elif keys[pygame.K_RIGHT]: action0 = 3
+        elif keys[pygame.K_DOWN]: action0 = 4
         
         # Step the environment with BOTH actions
         obs, reward, done, truncated, info = raw_env.step(action0, 1)
-        obs, reward, done, truncated, info = raw_env.step(0, 0)
+        print(obs[9])
         #print(f"reward: {reward}")
+        obs, reward, done, truncated, info = raw_env.step(0, 0)
+    
         raw_env.render()
         
         if done:

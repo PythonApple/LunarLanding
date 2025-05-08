@@ -18,19 +18,16 @@ env = RecordVideo(
 model = PPO(
     "MlpPolicy",
     env,
-    verbose=1,          # Show training logs
-    device="auto",      # Uses GPU if available
-    learning_rate=1e-4,
-    ent_coef=0.1,       # Encourage exploration
-    clip_range=0.1,
-    n_steps=1024,       # Steps per environment per update
-    batch_size=32,      # Batch size
-    gamma=0.99,         # Discount factor
+    learning_rate=1e-4,       # Slower for stability
+    n_steps=4096,            # More steps for complex strategies
+    clip_range=0.1,          # Tighter clipping for competition
+    ent_coef=0.02,           # Boost exploration
+    verbose=1
 )
 
 # Train the model
 model.learn(
-    total_timesteps=100_000,  # Train for 500k steps (~250 episodes)
+    total_timesteps=500_000,  # Train for 500k steps (~250 episodes)
     progress_bar=True        # Shows nice progress bar
 )
 
