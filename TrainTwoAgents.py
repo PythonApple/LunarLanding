@@ -51,7 +51,7 @@ timelimit_env = TimeLimit(CompEnv, max_episode_steps=1000)  # 1000 steps per epi
 
 env = RecordVideo(
     timelimit_env,
-    video_folder="./videosRocket2",
+    video_folder="./videosRocket3",
     episode_trigger=lambda x: x % 1000 == 0,  # Record every 100 episodes
     disable_logger=True
 )

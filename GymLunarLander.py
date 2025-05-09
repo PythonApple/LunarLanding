@@ -652,8 +652,8 @@ class GymLunarLander(gym.Env, EzPickle):
         if curr_agent == 0:
             shaping = (
                 -100 * np.sqrt(state[0] * state[0] + state[1] * state[1])
-                - 100 * np.sqrt(state[2] * state[2] + state[3] * state[3])
-                - 100 * abs(state[4])
+              
+             
                 + 10 * state[6]
                 + 10 * state[7]
             )  # And ten points for legs contact, the idea is if you
