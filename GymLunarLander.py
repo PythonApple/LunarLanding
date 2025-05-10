@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     import pygame
 
 
-FPS = 50
+FPS = 100
 SCALE = 30.0  # affects how fast-paced the game is, forces should be adjusted as well
 
 MAIN_ENGINE_POWER = 52.0
@@ -257,9 +257,9 @@ class GymLunarLander(gym.Env, EzPickle):
         self.legs = []
         self.particles = []
         self.rockets = []
-        self.dones = [False ,False]
-        self.agent_crashed = [False, False]
-        self.shapings = [None, None]
+        self.dones = [False ,False, False, False]
+        self.agent_crashed = [False, False, False, False]
+        self.shapings = [None, None, None, None]
 
         self.prev_reward = None
 
@@ -298,7 +298,7 @@ class GymLunarLander(gym.Env, EzPickle):
         ).astype(np.float32)
 
         # useful range is -1 .. +1, but spikes can be higher
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(16,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(32,), dtype=np.float32)
 
         self.action_space = spaces.Discrete(5)
 
@@ -321,7 +321,31 @@ class GymLunarLander(gym.Env, EzPickle):
         self.world.DestroyBody(self.legs[1][1])
         self.legs = []
         self.rockets = []
+        self.dones = [False, False, False, False]
+        self.agent_crashed = [False, False, False, False]
+        self.shapings = [None, None, None, None]
     
+    def _create_lander(self, lander_x, lander_y, color1, color2):
+        lander = self.world.CreateDynamicBody(
+            position=(lander_x, lander_y),
+            angle=0.0,
+            fixtures=fixtureDef(
+                shape=polygonShape(
+                    vertices=[(x / SCALE, y / SCALE) for x, y in LANDER_POLY]
+                ),
+                density=5.0,
+                friction=0.1,
+                categoryBits=0x0010,
+                #maskBits=0x001,  # collide only with ground
+                restitution=0.0,
+            ),  # 0.99 bouncy
+        )
+        lander.lander_x = lander_x
+        lander.lander_y = lander_y
+        lander.color1 = color1
+        lander.color2 = color2
+        self.landers.append(lander)
+
 
     def reset(
         self,
@@ -329,9 +353,6 @@ class GymLunarLander(gym.Env, EzPickle):
         seed: Optional[int] = None,
         options: Optional[dict] = None,
     ):
-        self.dones = [False, False]
-        self.agent_crashed = [False, False]
-        self.shapings = [None, None]
         super().reset(seed=seed)
         self._destroy()
 
@@ -378,55 +399,27 @@ class GymLunarLander(gym.Env, EzPickle):
         self.moon.color2 = (0.0, 0.0, 0.0)
 
 
-        lander1_y = VIEWPORT_H / SCALE * 0.9
-        lander1_x = VIEWPORT_W / SCALE / 2 *.25
-
+        lander1_y = VIEWPORT_H / SCALE * 0.9        #RED TEAM
+        lander1_x = VIEWPORT_W / SCALE / 2 *.10  
         lander2_y = VIEWPORT_H / SCALE * 0.9
-        lander2_x = VIEWPORT_W / SCALE *.87
+        lander2_x = VIEWPORT_W / SCALE / 2 *.25
 
-        lander1 = self.world.CreateDynamicBody(
-            position=(lander1_x, lander1_y),
-            angle=0.0,
-            fixtures=fixtureDef(
-                shape=polygonShape(
-                    vertices=[(x / SCALE, y / SCALE) for x, y in LANDER_POLY]
-                ),
-                density=5.0,
-                friction=0.1,
-                categoryBits=0x0010,
-                #maskBits=0x001,  # collide only with ground
-                restitution=0.0,
-            ),  # 0.99 bouncy
-        )
-        lander1.color1 = (217, 30, 65) 
-        lander1.color2 = (140, 20, 40) 
-
-        lander2 = self.world.CreateDynamicBody(
-            position=(lander2_x, lander2_y),
-            angle=0.0,
-            fixtures=fixtureDef(
-                shape=polygonShape(
-                    vertices=[(x / SCALE, y / SCALE) for x, y in LANDER_POLY]
-                ),
-                density=5.0,
-                friction=0.1,
-                categoryBits=0x0010,
-                #maskBits=0x001,  # collide only with ground
-                restitution=0.0,
-            ),  # 0.99 bouncy
-        )
-        lander2.color1 = (30, 144, 255)
-        lander2.color2 = (0, 71, 171) 
-
-        self.landers = [lander1, lander2]
+        lander3_y = VIEWPORT_H / SCALE * 0.9        #BLUE TEAM
+        lander3_x = VIEWPORT_W / SCALE *.87
+        lander4_y = VIEWPORT_H / SCALE * 0.9
+        lander4_x = VIEWPORT_W / SCALE *.81
 
 
+        self._create_lander(lander1_x, lander1_y, (255, 100, 100), (180, 40, 40))
+        self._create_lander(lander2_x, lander2_y, (220, 60, 60), (150, 30, 30)) 
+        self._create_lander(lander3_x, lander3_y, (100, 149, 237), (30, 30, 180))
+        self._create_lander(lander4_x, lander4_y, (70, 130, 180), (20, 20, 120)) 
 
-        for lander , lander_x, lander_y, colors in zip(self.landers, [lander1_x, lander2_x], [lander1_y, lander2_y], [lander1.color2, lander2.color2]):
+        for lander in self.landers:
             lander_legs = []
             for i in [-1, +1]:
                 leg = self.world.CreateDynamicBody(
-                    position=(lander_x - i * LEG_AWAY / SCALE, lander_y),
+                    position=(lander.lander_x - i * LEG_AWAY / SCALE, lander.lander_y),
                     angle=(i * 0.05),
                     fixtures=fixtureDef(
                         shape=polygonShape(box=(LEG_W / SCALE, LEG_H / SCALE)),
@@ -437,8 +430,8 @@ class GymLunarLander(gym.Env, EzPickle):
                     ),
                 )
                 leg.ground_contact = False
-                leg.color1 = colors
-                leg.color2 = colors
+                leg.color1 = lander.color1
+                leg.color2 = lander.color2
                 rjd = revoluteJointDef(
                     bodyA=lander,
                     bodyB=leg,
@@ -537,9 +530,12 @@ class GymLunarLander(gym.Env, EzPickle):
         # Generate two random numbers between -1/SCALE and 1/SCALE.
         dispersion = [self.np_random.uniform(-1.0, +1.0) / SCALE for _ in range(2)]
 
-        if (curr_agent == 1):
+        if (curr_agent == 1 or curr_agent == 3):
             if (action == 4):
-                self._create_rocket(lander.position.x, lander.position.y, lander.angle + 3, speed=50.0)
+                if (curr_agent == 3):
+                    self._create_rocket(lander.position.x, lander.position.y, lander.angle + 3, speed=50.0)
+                elif (curr_agent == 1):
+                    self._create_rocket(lander.position.x, lander.position.y, lander.angle, speed=50.0)
 
 
         m_power = 0.0
@@ -624,9 +620,6 @@ class GymLunarLander(gym.Env, EzPickle):
 
         self.world.Step(1.0 / FPS, 6 * 30, 2 * 30)
 
-        pos = lander.position
-        vel = lander.linearVelocity
-
         state = [
             (self.landers[0].position.x - VIEWPORT_W / SCALE / 2) / (VIEWPORT_W / SCALE / 2),
             (self.landers[0].position.y - (self.helipad_y + LEG_DOWN / SCALE)) / (VIEWPORT_H / SCALE / 2),
@@ -644,18 +637,44 @@ class GymLunarLander(gym.Env, EzPickle):
             self.landers[1].angle,
             20.0 * self.landers[1].angularVelocity / FPS,
             1.0 if self.legs[1][0].ground_contact else 0.0,
-            1.0 if self.legs[1][1].ground_contact else 0.0
+            1.0 if self.legs[1][1].ground_contact else 0.0,
+
+            (self.landers[2].position.x - VIEWPORT_W / SCALE / 2) / (VIEWPORT_W / SCALE / 2),
+            (self.landers[2].position.y - (self.helipad_y + LEG_DOWN / SCALE)) / (VIEWPORT_H / SCALE / 2),
+            self.landers[2].linearVelocity.x * (VIEWPORT_W / SCALE / 2) / FPS,
+            self.landers[2].linearVelocity.y * (VIEWPORT_H / SCALE / 2) / FPS,
+            self.landers[2].angle,
+            20.0 * self.landers[2].angularVelocity / FPS,
+            1.0 if self.legs[2][0].ground_contact else 0.0,
+            1.0 if self.legs[2][1].ground_contact else 0.0,
+
+            (self.landers[3].position.x - VIEWPORT_W / SCALE / 2) / (VIEWPORT_W / SCALE / 2),
+            (self.landers[3].position.y - (self.helipad_y + LEG_DOWN / SCALE)) / (VIEWPORT_H / SCALE / 2),
+            self.landers[3].linearVelocity.x * (VIEWPORT_W / SCALE / 2) / FPS,
+            self.landers[3].linearVelocity.y * (VIEWPORT_H / SCALE / 2) / FPS,
+            self.landers[3].angle,
+            20.0 * self.landers[3].angularVelocity / FPS,
+            1.0 if self.legs[3][0].ground_contact else 0.0,
+            1.0 if self.legs[3][1].ground_contact else 0.0
         ]
-        assert len(state) == 16
+        assert len(state) == 32
+        if (curr_agent == 0):
+            offset = 0
+        elif (curr_agent == 1):
+            offset = 8;
+        elif (curr_agent == 2):
+            offset = 16;
+        elif (curr_agent == 3):
+            offset = 24;
 
         reward = 0
-        if curr_agent == 0:
+        if curr_agent == 0 or curr_agent == 2:
             shaping = (
-                -100 * np.sqrt(state[0] * state[0] + state[1] * state[1])
-              
-             
-                + 10 * state[6]
-                + 10 * state[7]
+                -100 * np.sqrt(state[0 + offset] * state[0 + offset] + state[1 + offset] * state[1 + offset])
+                - 100 * np.sqrt(state[2 + offset] * state[2 + offset] + state[3 + offset] * state[3 + offset])
+                - 100 * abs(state[4 + offset])
+                + 10 * state[6 + offset]
+                + 10 * state[7 + offset]
             )  # And ten points for legs contact, the idea is if you
             # lose contact again after landing, you get negative reward
             if self.shapings[curr_agent] is not None:
@@ -670,17 +689,13 @@ class GymLunarLander(gym.Env, EzPickle):
                 self.dones[curr_agent] = True
                 reward += 100
 
-        if curr_agent == 1:
-            offset = 8
-        else:
-            offset = 0
-
         if self.agent_crashed[curr_agent] or abs(state[0 + offset]) >= 1.0 or abs(state[1 + offset]) >= 1.6:
             self.dones[curr_agent] = True
             reward -= 100
         
         terminated = False
-        terminated = self.dones[0] 
+        terminated = self.dones[1]# and self.dones[2]
+        #print(f"Agent1 {self.dones[0]} Agent2 {self.dones[1]} Agent3 {self.dones[2]} Agent4 {self.dones[3]}")
         
 
         if self.render_mode == "human":
@@ -762,8 +777,8 @@ class GymLunarLander(gym.Env, EzPickle):
 
                 else:
                     path = [trans * v * SCALE for v in f.shape.vertices]
-                    pygame.draw.polygon(self.surf, color=obj.color1, points=path)
-                    gfxdraw.aapolygon(self.surf, path, obj.color1)
+                    pygame.draw.polygon(self.surf, color=obj.color2, points=path)
+                    gfxdraw.aapolygon(self.surf, path, obj.color2)
                     pygame.draw.aalines(
                         self.surf, color=obj.color2, points=path, closed=True
                     )
