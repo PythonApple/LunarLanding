@@ -513,7 +513,7 @@ class GymLunarLander(gym.Env, EzPickle):
 
 
     def step(self, action, curr_agent):
-        opp_agent = 1 - curr_agent
+        self.agent_crashed = [False, False, False, False]
         lander = self.landers[curr_agent]
 
         # Update wind and apply to the lander
@@ -661,11 +661,11 @@ class GymLunarLander(gym.Env, EzPickle):
         if (curr_agent == 0):
             offset = 0
         elif (curr_agent == 1):
-            offset = 8;
+            offset = 8
         elif (curr_agent == 2):
-            offset = 16;
+            offset = 16
         elif (curr_agent == 3):
-            offset = 24;
+            offset = 24
 
         reward = 0
         if curr_agent == 0 or curr_agent == 2:
@@ -681,9 +681,7 @@ class GymLunarLander(gym.Env, EzPickle):
                 reward = shaping - self.shapings[curr_agent]
             self.shapings[curr_agent] = shaping
 
-            reward -= (
-                m_power * 0.30
-            )  # less fuel spent is better, about -30 for heuristic landing
+            reward -= m_power * 0.30
             reward -= s_power * 0.03
             if not lander.awake:
                 self.dones[curr_agent] = True
@@ -694,7 +692,7 @@ class GymLunarLander(gym.Env, EzPickle):
             reward -= 100
         
         terminated = False
-        terminated = self.dones[1]# and self.dones[2]
+        terminated = self.dones[0] and self.dones[2]
         #print(f"Agent1 {self.dones[0]} Agent2 {self.dones[1]} Agent3 {self.dones[2]} Agent4 {self.dones[3]}")
         
 
