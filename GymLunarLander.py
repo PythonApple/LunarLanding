@@ -266,41 +266,88 @@ class GymLunarLander(gym.Env, EzPickle):
 
         low = np.array(
             [
-                # these are bounds for position
-                # realistically the environment should have ended
-                # long before we reach more than 50% outside
-                -2.5,  # x coordinate
-                -2.5,  # y coordinate
-                # velocity bounds is 5x rated speed
+                -2.5, 
+                -2.5,  
                 -10.0,
                 -10.0,
                 -2 * math.pi,
                 -10.0,
                 -0.0,
                 -0.0,
+                -2.5, 
+                -2.5,  
+                -10.0,
+                -10.0,
+                -2 * math.pi,
+                -10.0,
+                -0.0,
+                -0.0,
+                -2.5, 
+                -2.5,  
+                -10.0,
+                -10.0,
+                -2 * math.pi,
+                -10.0,
+                -0.0,
+                -0.0,
+                -2.5, 
+                -2.5,  
+                -10.0,
+                -10.0,
+                -2 * math.pi,
+                -10.0,
+                -0.0,
+                -0.0,
+                -1,
+                -1,
             ]
         ).astype(np.float32)
         high = np.array(
             [
-                # these are bounds for position
-                # realistically the environment should have ended
-                # long before we reach more than 50% outside
-                2.5,  # x coordinate
-                2.5,  # y coordinate
-                # velocity bounds is 5x rated speed
+                2.5,  
+                2.5, 
                 10.0,
                 10.0,
                 2 * math.pi,
                 10.0,
                 1.0,
                 1.0,
+                                2.5,  
+                2.5, 
+                10.0,
+                10.0,
+                2 * math.pi,
+                10.0,
+                1.0,
+                1.0,
+                                2.5,  
+                2.5, 
+                10.0,
+                10.0,
+                2 * math.pi,
+                10.0,
+                1.0,
+                1.0,
+                                2.5,  
+                2.5, 
+                10.0,
+                10.0,
+                2 * math.pi,
+                10.0,
+                1.0,
+                1.0,
+                1,
+                1,
             ]
         ).astype(np.float32)
 
-        # useful range is -1 .. +1, but spikes can be higher
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(32,), dtype=np.float32)
-
-        self.action_space = spaces.Discrete(5)
+        self.observation_space = spaces.Dict({
+            "agent1": spaces.Box(low=-np.inf, high=np.inf, shape=(34,)),
+            "agent2": spaces.Box(low=-np.inf, high=np.inf, shape=(34,))
+        })
+        
+        # Each agent has its own action space
+        self.action_space = spaces.MultiDiscrete([4,5])
 
         self.render_mode = render_mode
 
@@ -462,7 +509,11 @@ class GymLunarLander(gym.Env, EzPickle):
 
         if self.render_mode == "human":
             self.render()
-        return self.step(0, 0)[0], {}  
+
+        return {
+            "agent1": np.random.rand(34),
+            "agent2": np.random.rand(34)
+        }, {}
 
     def _create_particle(self, mass, x, y, ttl):
         p = self.world.CreateDynamicBody(
@@ -692,14 +743,17 @@ class GymLunarLander(gym.Env, EzPickle):
             reward -= 100
         
         terminated = False
-        terminated = self.dones[0] and self.dones[2]
+        terminated = self.dones[1]# and self.dones[2]
         #print(f"Agent1 {self.dones[0]} Agent2 {self.dones[1]} Agent3 {self.dones[2]} Agent4 {self.dones[3]}")
         
 
         if self.render_mode == "human":
             self.render()
         # truncation=False as the time limit is handled by the `TimeLimit` wrapper added during `make`
-        return np.array(state, dtype=np.float32), reward, terminated, False, {}
+        return {
+            "agent1": state + [1,0],
+            "agent2": state + [0,1]
+        }, reward, terminated, False, {}
 
     def render(self):
         if self.render_mode is None:
