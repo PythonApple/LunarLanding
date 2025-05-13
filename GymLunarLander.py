@@ -70,6 +70,7 @@ class ContactDetector(contactListener):
             if (lander == bodyA and bodyB == self.env.moon) or \
                (lander == bodyB and bodyA == self.env.moon):
                 self.env.agent_crashed[index] = True 
+                self.env.dones[index] = True
              
         
         # Check for leg-moon contacts
@@ -78,6 +79,8 @@ class ContactDetector(contactListener):
                 if (leg == bodyA and bodyB == self.env.moon) or \
                    (leg == bodyB and bodyA == self.env.moon):
                     leg.ground_contact = True
+                else:
+                    leg.ground_contact = False
 
     def EndContact(self, contact):
         pass
@@ -361,11 +364,17 @@ class GymLunarLander(gym.Env, EzPickle):
         self.moon = None
         self.world.DestroyBody(self.landers[0])
         self.world.DestroyBody(self.landers[1])
+        self.world.DestroyBody(self.landers[2])
+        self.world.DestroyBody(self.landers[3])
         self.landers = []
         self.world.DestroyBody(self.legs[0][0])
         self.world.DestroyBody(self.legs[0][1])
         self.world.DestroyBody(self.legs[1][0])
         self.world.DestroyBody(self.legs[1][1])
+        self.world.DestroyBody(self.legs[2][0])
+        self.world.DestroyBody(self.legs[2][1])
+        self.world.DestroyBody(self.legs[3][0])
+        self.world.DestroyBody(self.legs[3][1])
         self.legs = []
         self.rockets = []
         self.dones = [False, False, False, False]
@@ -511,8 +520,10 @@ class GymLunarLander(gym.Env, EzPickle):
             self.render()
 
         return {
-            "agent1": np.random.rand(34),
-            "agent2": np.random.rand(34)
+            "red1": np.random.rand(36).astype(np.float32),
+            "red2": np.random.rand(36).astype(np.float32),
+            "blue1": np.random.rand(36).astype(np.float32),
+            "blue2": np.random.rand(36).astype(np.float32),
         }, {}
 
     def _create_particle(self, mass, x, y, ttl):
@@ -564,7 +575,6 @@ class GymLunarLander(gym.Env, EzPickle):
 
 
     def step(self, action, curr_agent):
-        self.agent_crashed = [False, False, False, False]
         lander = self.landers[curr_agent]
 
         # Update wind and apply to the lander
@@ -740,20 +750,16 @@ class GymLunarLander(gym.Env, EzPickle):
 
         if self.agent_crashed[curr_agent] or abs(state[0 + offset]) >= 1.0 or abs(state[1 + offset]) >= 1.6:
             self.dones[curr_agent] = True
+            self.agent_crashed[curr_agent] = False
             reward -= 100
         
         terminated = False
-        terminated = self.dones[1]# and self.dones[2]
-        #print(f"Agent1 {self.dones[0]} Agent2 {self.dones[1]} Agent3 {self.dones[2]} Agent4 {self.dones[3]}")
-        
+        terminated = self.dones[0] # self.dones[2]
 
         if self.render_mode == "human":
             self.render()
-        # truncation=False as the time limit is handled by the `TimeLimit` wrapper added during `make`
-        return {
-            "agent1": state + [1,0],
-            "agent2": state + [0,1]
-        }, reward, terminated, False, {}
+
+        return state, reward, terminated, False, {}
 
     def render(self):
         if self.render_mode is None:
