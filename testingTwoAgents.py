@@ -53,6 +53,7 @@ try:
         if done:
             print(f"Episode finished! Reward: {reward}")
             obs, info = raw_env.reset()
+            pass
         
         clock.tick(60)  # 60 FPS
         

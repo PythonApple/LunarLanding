@@ -426,7 +426,9 @@ class GymLunarLander(gym.Env, EzPickle):
 
         # Create Terrain
         CHUNKS = 11
-        height = self.np_random.uniform(0, H / 2, size=(CHUNKS + 1,))
+        #height = self.np_random.uniform(0, H / 2, size=(CHUNKS + 1,))
+        height = np.full((CHUNKS + 1,), H / 4)  # or just use self.helipad_y if it's already defined
+
         chunk_x = [W / (CHUNKS - 1) * i for i in range(CHUNKS)]
         self.helipad_x1 = chunk_x[CHUNKS // 2 - 1]
         self.helipad_x2 = chunk_x[CHUNKS // 2 + 1]
@@ -681,44 +683,25 @@ class GymLunarLander(gym.Env, EzPickle):
 
         self.world.Step(1.0 / FPS, 6 * 30, 2 * 30)
 
-        state = [
-            (self.landers[0].position.x - VIEWPORT_W / SCALE / 2) / (VIEWPORT_W / SCALE / 2),
-            (self.landers[0].position.y - (self.helipad_y + LEG_DOWN / SCALE)) / (VIEWPORT_H / SCALE / 2),
-            self.landers[0].linearVelocity.x * (VIEWPORT_W / SCALE / 2) / FPS,
-            self.landers[0].linearVelocity.y * (VIEWPORT_H / SCALE / 2) / FPS,
-            self.landers[0].angle,
-            20.0 * self.landers[0].angularVelocity / FPS,
-            1.0 if self.legs[0][0].ground_contact else 0.0,
-            1.0 if self.legs[0][1].ground_contact else 0.0,
-
-            (self.landers[1].position.x - VIEWPORT_W / SCALE / 2) / (VIEWPORT_W / SCALE / 2),
-            (self.landers[1].position.y - (self.helipad_y + LEG_DOWN / SCALE)) / (VIEWPORT_H / SCALE / 2),
-            self.landers[1].linearVelocity.x * (VIEWPORT_W / SCALE / 2) / FPS,
-            self.landers[1].linearVelocity.y * (VIEWPORT_H / SCALE / 2) / FPS,
-            self.landers[1].angle,
-            20.0 * self.landers[1].angularVelocity / FPS,
-            1.0 if self.legs[1][0].ground_contact else 0.0,
-            1.0 if self.legs[1][1].ground_contact else 0.0,
-
-            (self.landers[2].position.x - VIEWPORT_W / SCALE / 2) / (VIEWPORT_W / SCALE / 2),
-            (self.landers[2].position.y - (self.helipad_y + LEG_DOWN / SCALE)) / (VIEWPORT_H / SCALE / 2),
-            self.landers[2].linearVelocity.x * (VIEWPORT_W / SCALE / 2) / FPS,
-            self.landers[2].linearVelocity.y * (VIEWPORT_H / SCALE / 2) / FPS,
-            self.landers[2].angle,
-            20.0 * self.landers[2].angularVelocity / FPS,
-            1.0 if self.legs[2][0].ground_contact else 0.0,
-            1.0 if self.legs[2][1].ground_contact else 0.0,
-
-            (self.landers[3].position.x - VIEWPORT_W / SCALE / 2) / (VIEWPORT_W / SCALE / 2),
-            (self.landers[3].position.y - (self.helipad_y + LEG_DOWN / SCALE)) / (VIEWPORT_H / SCALE / 2),
-            self.landers[3].linearVelocity.x * (VIEWPORT_W / SCALE / 2) / FPS,
-            self.landers[3].linearVelocity.y * (VIEWPORT_H / SCALE / 2) / FPS,
-            self.landers[3].angle,
-            20.0 * self.landers[3].angularVelocity / FPS,
-            1.0 if self.legs[3][0].ground_contact else 0.0,
-            1.0 if self.legs[3][1].ground_contact else 0.0
-        ]
+        POSX_CLAMP = (-1.5, 1.5)
+        POSY_CLAMP = (-0.5, 1.7)
+        VEL_CLAMP = (-5, 5)
+        state = []
+        for i in range(4):
+            lander_temp = self.landers[i]
+            leg1, leg2 = self.legs[i]
+            state += [
+                np.clip((lander_temp.position.x - VIEWPORT_W / SCALE / 2) / (VIEWPORT_W / SCALE / 2), *POSX_CLAMP),
+                np.clip((lander_temp.position.y - (self.helipad_y + LEG_DOWN / SCALE)) / (VIEWPORT_H / SCALE / 2), *POSY_CLAMP),
+                np.clip(lander_temp.linearVelocity.x * (VIEWPORT_W / SCALE / 2) / FPS, *VEL_CLAMP),
+                np.clip(lander_temp.linearVelocity.y * (VIEWPORT_H / SCALE / 2) / FPS, *VEL_CLAMP),
+                ((lander_temp.angle + math.pi) % (2 * math.pi)) - math.pi,
+                np.clip(20.0 * lander_temp.angularVelocity / FPS, *VEL_CLAMP),
+                1.0 if leg1.ground_contact else 0.0,
+                1.0 if leg2.ground_contact else 0.0,
+            ]
         assert len(state) == 32
+        
         if (curr_agent == 0):
             offset = 0
         elif (curr_agent == 1):
@@ -731,7 +714,7 @@ class GymLunarLander(gym.Env, EzPickle):
         reward = 0
         if curr_agent == 0 or curr_agent == 2:
             shaping = (
-                -100 * np.sqrt(state[0 + offset] * state[0 + offset] + state[1 + offset] * state[1 + offset])
+                -200 * np.sqrt(state[0 + offset] * state[0 + offset] + state[1 + offset] * state[1 + offset])
                 - 100 * np.sqrt(state[2 + offset] * state[2 + offset] + state[3 + offset] * state[3 + offset])
                 - 100 * abs(state[4 + offset])
                 + 10 * state[6 + offset]
@@ -754,7 +737,7 @@ class GymLunarLander(gym.Env, EzPickle):
             reward -= 100
         
         terminated = False
-        terminated = self.dones[0] # self.dones[2]
+        terminated = self.dones[0] #or self.dones[1] # self.dones[2]
 
         if self.render_mode == "human":
             self.render()

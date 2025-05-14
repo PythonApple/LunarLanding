@@ -29,12 +29,16 @@ class RLlibWrapper(MultiAgentEnv):
             "blue2": gym.spaces.Discrete(5),
         }
 
+        self.count =0
+
 
     def reset(self, *, seed=None, options=None):
+         self.count =0
          return self.env.reset()
     
 
     def step(self, action_dict):
+        self.count +=1
         terminateds = {"__all__": False}
         rewards = {}
         team1_rewards =0
@@ -42,19 +46,19 @@ class RLlibWrapper(MultiAgentEnv):
 
         obs, reward, terminated, truncated, info = self.env.step(action_dict["red1"], 0)
         team1_rewards += reward
-        obs, reward, terminated, truncated, info = self.env.step(0, 1)
+        obs, reward, terminated, truncated, info = self.env.step(action_dict["red2"], 1)
         team1_rewards += reward
         obs, reward, terminated, truncated, info = self.env.step(0, 2)
-        team2_rewards
+        team2_rewards += reward
         obs, reward, terminated, truncated, info = self.env.step(0, 3)
         team2_rewards += reward
 
         rewards["red1"] = team1_rewards #- team2_rewards
         rewards["red2"] = team1_rewards #- team2_rewards
-        rewards["blue1"] = team2_rewards# -team1_rewards
-        rewards["blue2"] = team2_rewards# -team1_rewards
+        rewards["blue1"] = team2_rewards -team1_rewards
+        rewards["blue2"] = team2_rewards -team1_rewards
 
-        if terminated:
+        if terminated or self.count >500:
             terminateds["__all__"] = True
 
         return(
@@ -73,7 +77,17 @@ class RLlibWrapper(MultiAgentEnv):
 config = (
     PPOConfig()
     .environment(env = RLlibWrapper)
-    .env_runners(num_env_runners=8)
+    .env_runners(num_env_runners=4)
+    .framework("torch", 
+               torch_compile_learner=True, 
+               torch_compile_learner_dynamo_backend="inductor",
+               torch_compile_learner_dynamo_mode="default")
+    .training(
+        lr=5e-4,
+        train_batch_size=1024,
+        num_sgd_iter=3,
+        gamma=0.99,
+    )
     .multi_agent(
         policies={
             "redTeam": (None, gym.spaces.Box(low=-np.inf, high=np.inf, shape=(36,), dtype=np.float32), gym.spaces.Discrete(5), {}),
@@ -82,17 +96,18 @@ config = (
         policy_mapping_fn=lambda agent_id, info: ("redTeam" if agent_id.startswith("red") else "blueTeam"),
         policies_to_train=["redTeam"], 
     )
-
 )
+config.model["fcnet_hiddens"] = [64, 64]
 algo = config.build()
-#algo.restore("/Users/xingsun/LunarLanding/checkpoints/red_blue_model")
+algo.restore("/Users/xingsun/LunarLanding/checkpoints/red_blue_model")
 save_dir = os.path.abspath("checkpoints/red_blue_model")
 
 
 for iteration in range(100000):  #
     result = algo.train()
-    print(f"Iteration {iteration}")
-    print(f"result: {result}")
-    algo.save(f"file://{save_dir}")
+    if iteration % 20 == 0:
+        print(f"Iteration {iteration}")
+        print(f"result: {result}")
+        algo.save(f"file://{save_dir}")
 
 
