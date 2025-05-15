@@ -266,91 +266,9 @@ class GymLunarLander(gym.Env, EzPickle):
 
         self.prev_reward = None
 
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(32,), dtype=np.float32)
 
-        low = np.array(
-            [
-                -2.5, 
-                -2.5,  
-                -10.0,
-                -10.0,
-                -2 * math.pi,
-                -10.0,
-                -0.0,
-                -0.0,
-                -2.5, 
-                -2.5,  
-                -10.0,
-                -10.0,
-                -2 * math.pi,
-                -10.0,
-                -0.0,
-                -0.0,
-                -2.5, 
-                -2.5,  
-                -10.0,
-                -10.0,
-                -2 * math.pi,
-                -10.0,
-                -0.0,
-                -0.0,
-                -2.5, 
-                -2.5,  
-                -10.0,
-                -10.0,
-                -2 * math.pi,
-                -10.0,
-                -0.0,
-                -0.0,
-                -1,
-                -1,
-            ]
-        ).astype(np.float32)
-        high = np.array(
-            [
-                2.5,  
-                2.5, 
-                10.0,
-                10.0,
-                2 * math.pi,
-                10.0,
-                1.0,
-                1.0,
-                                2.5,  
-                2.5, 
-                10.0,
-                10.0,
-                2 * math.pi,
-                10.0,
-                1.0,
-                1.0,
-                                2.5,  
-                2.5, 
-                10.0,
-                10.0,
-                2 * math.pi,
-                10.0,
-                1.0,
-                1.0,
-                                2.5,  
-                2.5, 
-                10.0,
-                10.0,
-                2 * math.pi,
-                10.0,
-                1.0,
-                1.0,
-                1,
-                1,
-            ]
-        ).astype(np.float32)
-
-        self.observation_space = spaces.Dict({
-            "agent1": spaces.Box(low=-np.inf, high=np.inf, shape=(34,)),
-            "agent2": spaces.Box(low=-np.inf, high=np.inf, shape=(34,))
-        })
-        
-        # Each agent has its own action space
-        self.action_space = spaces.MultiDiscrete([4,5])
+        self.action_space = spaces.Discrete(5)
 
         self.render_mode = render_mode
 
@@ -521,12 +439,13 @@ class GymLunarLander(gym.Env, EzPickle):
         if self.render_mode == "human":
             self.render()
 
-        return {
-            "red1": np.random.rand(36).astype(np.float32),
-            "red2": np.random.rand(36).astype(np.float32),
-            "blue1": np.random.rand(36).astype(np.float32),
-            "blue2": np.random.rand(36).astype(np.float32),
-        }, {}
+        #return {
+        #    "red1": np.random.rand(36).astype(np.float32),
+        #    "red2": np.random.rand(36).astype(np.float32),
+        #    "blue1": np.random.rand(36).astype(np.float32),
+        #    "blue2": np.random.rand(36).astype(np.float32),
+        #}, {}
+        return self.step(0, 0)[0], {} 
 
     def _create_particle(self, mass, x, y, ttl):
         p = self.world.CreateDynamicBody(
@@ -737,7 +656,7 @@ class GymLunarLander(gym.Env, EzPickle):
             reward -= 100
         
         terminated = False
-        terminated = self.dones[0] #or self.dones[1] # self.dones[2]
+        terminated = self.dones[0] and self.dones[2]
 
         if self.render_mode == "human":
             self.render()

@@ -11,7 +11,7 @@ import warnings
 class RLlibWrapper(MultiAgentEnv):
     def __init__(self, config=None):
         super().__init__()
-        self.env = GymLunarLander(render_mode=None)
+        self.env = GymLunarLander(render_mode="human")
         #self.env = RecordVideo(self.env, "videos", episode_trigger=lambda x: True)
         
         self.agents = self.possible_agents = ["red1", "red2", "blue1", "blue2"]
@@ -77,16 +77,17 @@ class RLlibWrapper(MultiAgentEnv):
 config = (
     PPOConfig()
     .environment(env = RLlibWrapper)
-    .env_runners(num_env_runners=4)
+    .env_runners(num_env_runners=1, rollout_fragment_length=512)
     .framework("torch", 
                torch_compile_learner=True, 
                torch_compile_learner_dynamo_backend="inductor",
                torch_compile_learner_dynamo_mode="default")
     .training(
-        lr=5e-4,
-        train_batch_size=1024,
-        num_sgd_iter=3,
+        train_batch_size=2048,
+        num_sgd_iter=10,
         gamma=0.99,
+        lr=3e-4,
+        grad_clip=0.5,
     )
     .multi_agent(
         policies={
