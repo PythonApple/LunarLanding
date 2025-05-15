@@ -344,8 +344,8 @@ class GymLunarLander(gym.Env, EzPickle):
 
         # Create Terrain
         CHUNKS = 11
-        #height = self.np_random.uniform(0, H / 2, size=(CHUNKS + 1,))
-        height = np.full((CHUNKS + 1,), H / 4)  # or just use self.helipad_y if it's already defined
+        height = self.np_random.uniform(0, H / 2, size=(CHUNKS + 1,))
+        #height = np.full((CHUNKS + 1,), H / 4)  # or just use self.helipad_y if it's already defined
 
         chunk_x = [W / (CHUNKS - 1) * i for i in range(CHUNKS)]
         self.helipad_x1 = chunk_x[CHUNKS // 2 - 1]
