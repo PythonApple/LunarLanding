@@ -3,7 +3,7 @@ from GymLunarLander import GymLunarLander
 import gymnasium as gym
 from gymnasium.wrappers import RecordVideo
 from gymnasium.wrappers import TimeLimit
-from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
+from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor
 
 
 class CompetitiveEnvWrapper(gym.Wrapper):
@@ -16,6 +16,9 @@ class CompetitiveEnvWrapper(gym.Wrapper):
         self.agents.append(PPO.load("Agent3_4Game"))
         self.agents.append(PPO.load("Agent4_4Game"))
         self.current_agent = None
+
+    def set_current(self, agent_id):
+        self.current_agent = agent_id
  
     def add_agent(self, agent):
         self.agents.append(agent)
@@ -59,36 +62,73 @@ def make_env():
     def _init():
         base_env = GymLunarLander(render_mode="rgb_array")
         CompEnv = CompetitiveEnvWrapper(base_env)
-        CompEnv.current_agent =2
         timelimit_env = TimeLimit(CompEnv, max_episode_steps=1000)  # 1000 steps per episode
         env = RecordVideo(
             timelimit_env,
             video_folder="./4Game3",
-            episode_trigger=lambda x: x % 100 == 0,  # Record every 100 episodes
+            episode_trigger=lambda x: x % 10 == 0,  # Record every 100 episodes
             disable_logger=True
         )
         return env
     return _init
 
-env = SubprocVecEnv([make_env() for _ in range(4)])  
+if __name__ == "__main__":
 
-agent1 = PPO.load("Agent1_4Game", env=env, verbose=1)
-agent2 = PPO.load("Agent2_4Game", env=env, verbose=1)
-agent3 = PPO.load("Agent3_4Game", env=env, verbose=1)
-agent4 = PPO.load("Agent4_4Game", env=env, verbose=1)
+    env = SubprocVecEnv([make_env() for _ in range(4)])  
+    env = VecMonitor(env)
 
-# Training loop
-for iteration in range(100000):
+    agent1 = PPO.load("Agent1_4Game", env=env, verbose=1)
+    agent2 = PPO.load("Agent2_4Game", env=env, verbose=1)
+    agent3_loaded = PPO.load("Agent3_4Game", env=env, verbose=1)
+    agent4_loaded = PPO.load("Agent4_4Game", env=env, verbose=1)
 
-    agent3.learn(total_timesteps=10_000, reset_num_timesteps=False)
+    agent3 = PPO(
+    "MlpPolicy",
+    env=env,
+    learning_rate=1e-3,
+    ent_coef=0.02,
+    vf_coef=0.25,
+    n_steps=1024,
+    batch_size=256,
+    n_epochs=10,
+    clip_range=lambda _: 0.2,
+    verbose=1,
+    )
+    agent3.policy.load_state_dict(agent3_loaded.policy.state_dict())
 
-    agent1.save("Agent1_4Game")  
-    agent2.save("Agent2_4Game")  
-    agent3.save("Agent3_4Game")
-    agent4.save("Agent4_4Game")
+    agent4 = PPO(
+    "MlpPolicy",
+    env=env,
+    learning_rate=1e-3,
+    ent_coef=0.02,
+    vf_coef=0.25,
+    n_steps=1024,
+    batch_size=256,
+    n_epochs=10,
+    clip_range=lambda _: 0.2,
+    verbose=1,
+    )
+    agent4.policy.load_state_dict(agent4_loaded.policy.state_dict())
 
-    print(f"Iteration {iteration + 1} complete.")
-print("Training complete.")
+    # Training loop
+    for iteration in range(100000):
 
-#tensorboard --logdir file:///Users/xingsun/LunarLanding/logs
-#/Users/xingsun/Downloads/events.out.tfevents.1746838080.SL-2ZN2SL3.8560.0
+        #env.env_method("set_current", 0)
+        #agent1.learn(total_timesteps=10_000, reset_num_timesteps=False)
+        #env.env_method("set_current", 1)
+        #agent2.learn(total_timesteps=10_000, reset_num_timesteps=False)
+        env.env_method("set_current", 2)
+        agent3.learn(total_timesteps=100_000, reset_num_timesteps=True)
+        env.env_method("set_current", 3)
+        agent4.learn(total_timesteps=100_000, reset_num_timesteps=True)
+
+        agent1.save("Agent1_4Game")  
+        agent2.save("Agent2_4Game")  
+        agent3.save("Agent3_4Game")
+        agent4.save("Agent4_4Game")
+
+        print(f"Iteration {iteration + 1} complete.")
+    print("Training complete.")
+
+    #tensorboard --logdir file:///Users/xingsun/LunarLanding/logs
+    #/Users/xingsun/Downloads/events.out.tfevents.1746838080.SL-2ZN2SL3.8560.0
