@@ -263,6 +263,7 @@ class GymLunarLander(gym.Env, EzPickle):
         self.dones = [False ,False, False, False]
         self.agent_crashed = [False, False, False, False]
         self.shapings = [None, None, None, None]
+        self.score = 0
 
         self.prev_reward = None
 
@@ -298,6 +299,7 @@ class GymLunarLander(gym.Env, EzPickle):
         self.dones = [False, False, False, False]
         self.agent_crashed = [False, False, False, False]
         self.shapings = [None, None, None, None]
+        self.score =0
     
     def _create_lander(self, lander_x, lander_y, color1, color2):
         lander = self.world.CreateDynamicBody(
@@ -345,6 +347,10 @@ class GymLunarLander(gym.Env, EzPickle):
         # Create Terrain
         CHUNKS = 11
         height = self.np_random.uniform(0, H / 2, size=(CHUNKS + 1,))
+        height[0] = H * 0.45
+        height[1] = H * 0.35
+        height[-1] = H * 0.45
+        height[-2] = H * 0.35
         #height = np.full((CHUNKS + 1,), H / 4)  # or just use self.helipad_y if it's already defined
 
         chunk_x = [W / (CHUNKS - 1) * i for i in range(CHUNKS)]
@@ -386,10 +392,10 @@ class GymLunarLander(gym.Env, EzPickle):
         lander4_x = VIEWPORT_W / SCALE *.81
 
 
-        self._create_lander(lander1_x, lander1_y, (255, 100, 100), (180, 40, 40))
-        self._create_lander(lander2_x, lander2_y, (220, 60, 60), (150, 30, 30)) 
-        self._create_lander(lander3_x, lander3_y, (100, 149, 237), (30, 30, 180))
-        self._create_lander(lander4_x, lander4_y, (70, 130, 180), (20, 20, 120)) 
+        self._create_lander(lander1_x, lander1_y, (224, 49, 0), (224, 49, 0))
+        self._create_lander(lander2_x, lander2_y, (220, 60, 60), (137, 30, 0)) 
+        self._create_lander(lander3_x, lander3_y, (0, 209, 224), (0, 173, 230))
+        self._create_lander(lander4_x, lander4_y, (70, 130, 180), (0, 107, 142)) 
 
         for lander in self.landers:
             lander_legs = []
@@ -471,12 +477,12 @@ class GymLunarLander(gym.Env, EzPickle):
         while self.rockets and (all_particle or self.rockets[0].ttl < 0):
             self.world.DestroyBody(self.rockets.pop(0))
 
-    def _create_rocket(self, x, y, angle, speed=50.0): 
+    def _create_rocket(self, x, y, angle, speed=1): 
 
         triangle_vertices = [
-            (-9/SCALE,0),
-            (3/SCALE, -6/SCALE),  # Bottom right
-            (3/SCALE, 6/SCALE)   # Top right
+            (-6/SCALE,0),
+            (2/SCALE, -4/SCALE),  # Bottom right
+            (2/SCALE, 4/SCALE)   # Top right
         ]
         vx = math.cos(angle) * speed
         vy = math.sin(angle) * speed
@@ -494,6 +500,8 @@ class GymLunarLander(gym.Env, EzPickle):
         rocket.is_triangle = True
         self.rockets.append(rocket)
 
+    def set_score(self, score):
+        self.score += score
 
     def step(self, action, curr_agent):
         lander = self.landers[curr_agent]
@@ -634,8 +642,8 @@ class GymLunarLander(gym.Env, EzPickle):
         if curr_agent == 0 or curr_agent == 2:
             shaping = (
                 -200 * np.sqrt(state[0 + offset] * state[0 + offset] + state[1 + offset] * state[1 + offset])
-                - 100 * np.sqrt(state[2 + offset] * state[2 + offset] + state[3 + offset] * state[3 + offset])
-                - 100 * abs(state[4 + offset])
+                - 25 * np.sqrt(state[2 + offset] * state[2 + offset] + state[3 + offset] * state[3 + offset])
+                #- 50 * abs(state[4 + offset])
                 + 10 * state[6 + offset]
                 + 10 * state[7 + offset]
             )  # And ten points for legs contact, the idea is if you
@@ -648,15 +656,15 @@ class GymLunarLander(gym.Env, EzPickle):
             reward -= s_power * 0.03
             if not lander.awake:
                 self.dones[curr_agent] = True
-                reward += 100
+                #reward += 20
 
         if self.agent_crashed[curr_agent] or abs(state[0 + offset]) >= 1.0 or abs(state[1 + offset]) >= 1.6:
             self.dones[curr_agent] = True
             self.agent_crashed[curr_agent] = False
-            reward -= 100
+            reward -= 1
         
         terminated = False
-        terminated = self.dones[0] and self.dones[2]
+        #terminated = self.dones[0] and self.dones[2]
 
         if self.render_mode == "human":
             self.render()
@@ -778,6 +786,14 @@ class GymLunarLander(gym.Env, EzPickle):
                 pygame.draw.polygon(self.surf, (255, 100, 0), screen_vertices)
 
         self.surf = pygame.transform.flip(self.surf, False, True)
+
+        pygame.font.init()
+        font = pygame.font.SysFont(None, 75)
+        if self.score < 0:
+            text_surf = font.render(str(abs(self.score)), True, (224, 49, 0))
+        else:
+            text_surf = font.render(str(self.score), True, (0, 173, 230))
+        self.surf.blit(text_surf, (10,10))
 
         if self.render_mode == "human":
             assert self.screen is not None

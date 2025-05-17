@@ -43,8 +43,8 @@ try:
         elif keys[pygame.K_DOWN]: action0 = 4
         
         # Step the environment with BOTH actions
-        obs, reward, done, truncated, info = raw_env.step(action0, 0)
-        obs, reward, done, truncated, info = raw_env.step(0, 1)
+        obs, reward, done, truncated, info = raw_env.step(0, 0)
+        obs, reward, done, truncated, info = raw_env.step(action0, 1)
         obs, reward, done, truncated, info = raw_env.step(0, 2)
         obs, reward, done, truncated, info = raw_env.step(0, 3)
     

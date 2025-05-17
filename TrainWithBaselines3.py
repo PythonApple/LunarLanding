@@ -36,7 +36,7 @@ class CompetitiveEnvWrapper(gym.Wrapper):
         if self.current_agent in [0,1]:
             team1_score += reward
         elif self.current_agent in [2,3]:
-            team2_score += reward
+            team2_score += reward 
         
         # Opponents move
         if (self.current_agent != 0):
@@ -52,75 +52,49 @@ class CompetitiveEnvWrapper(gym.Wrapper):
             obs, reward, done, truncated, info = self.env.step(self.agents[3].predict(obs)[0], 3)
             team2_score += reward
       
+        self.env.set_score(team2_score-team1_score)
 
         if self.current_agent in [0,1]:
             return obs, team1_score - team2_score, done, truncated, info
         elif self.current_agent in [2,3]:
-            return obs, team2_score - team1_score, done, truncated, info
+            return obs, team2_score-team1_score, done, truncated, info
             
-def make_env():
+def make_env(id):
     def _init():
         base_env = GymLunarLander(render_mode="rgb_array")
         CompEnv = CompetitiveEnvWrapper(base_env)
-        timelimit_env = TimeLimit(CompEnv, max_episode_steps=1000)  # 1000 steps per episode
-        env = RecordVideo(
-            timelimit_env,
-            video_folder="./4Game3",
-            episode_trigger=lambda x: x % 10 == 0,  # Record every 100 episodes
-            disable_logger=True
-        )
+        env = TimeLimit(CompEnv, max_episode_steps=500)  # 1000 steps per episode
+        if id==0:
+            env = RecordVideo(
+                env,
+                video_folder="./4Game3",
+                episode_trigger=lambda x: x % 5 == 0,  # Record every 100 episodes
+                disable_logger=True
+            )
         return env
     return _init
 
 if __name__ == "__main__":
 
-    env = SubprocVecEnv([make_env() for _ in range(4)])  
+    env = SubprocVecEnv([make_env(i) for i in range(4)])  
     env = VecMonitor(env)
 
     agent1 = PPO.load("Agent1_4Game", env=env, verbose=1)
     agent2 = PPO.load("Agent2_4Game", env=env, verbose=1)
-    agent3_loaded = PPO.load("Agent3_4Game", env=env, verbose=1)
-    agent4_loaded = PPO.load("Agent4_4Game", env=env, verbose=1)
-
-    agent3 = PPO(
-    "MlpPolicy",
-    env=env,
-    learning_rate=1e-3,
-    ent_coef=0.02,
-    vf_coef=0.25,
-    n_steps=1024,
-    batch_size=256,
-    n_epochs=10,
-    clip_range=lambda _: 0.2,
-    verbose=1,
-    )
-    agent3.policy.load_state_dict(agent3_loaded.policy.state_dict())
-
-    agent4 = PPO(
-    "MlpPolicy",
-    env=env,
-    learning_rate=1e-3,
-    ent_coef=0.02,
-    vf_coef=0.25,
-    n_steps=1024,
-    batch_size=256,
-    n_epochs=10,
-    clip_range=lambda _: 0.2,
-    verbose=1,
-    )
-    agent4.policy.load_state_dict(agent4_loaded.policy.state_dict())
+    agent3 = PPO.load("Agent3_4Game", env=env, verbose=1)
+    agent4 = PPO.load("Agent4_4Game", env=env, verbose=1)
 
     # Training loop
     for iteration in range(100000):
 
-        #env.env_method("set_current", 0)
-        #agent1.learn(total_timesteps=10_000, reset_num_timesteps=False)
-        #env.env_method("set_current", 1)
-        #agent2.learn(total_timesteps=10_000, reset_num_timesteps=False)
-        env.env_method("set_current", 2)
-        agent3.learn(total_timesteps=100_000, reset_num_timesteps=True)
-        env.env_method("set_current", 3)
-        agent4.learn(total_timesteps=100_000, reset_num_timesteps=True)
+        env.env_method("set_current", 0)
+        agent1.learn(total_timesteps=20_000, reset_num_timesteps=False)
+        env.env_method("set_current", 1)
+        agent2.learn(total_timesteps=20_000, reset_num_timesteps=False)
+        #env.env_method("set_current", 2)
+        #agent3.learn(total_timesteps=20_000, reset_num_timesteps=False)
+        #env.env_method("set_current", 3)
+        #agent4.learn(total_timesteps=20_000, reset_num_timesteps=False)
 
         agent1.save("Agent1_4Game")  
         agent2.save("Agent2_4Game")  
