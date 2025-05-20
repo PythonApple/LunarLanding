@@ -79,11 +79,26 @@ class ContactDetector(contactListener):
                 if (leg == bodyA and bodyB == self.env.moon) or \
                    (leg == bodyB and bodyA == self.env.moon):
                     leg.ground_contact = True
-                else:
-                    leg.ground_contact = False
+           
 
     def EndContact(self, contact):
-        pass
+        bodyA = contact.fixtureA.body
+        bodyB = contact.fixtureB.body
+        
+        # Check for lander-moon collisions (game over)
+        for index, lander in enumerate(self.env.landers):
+            if (lander == bodyA and bodyB == self.env.moon) or \
+               (lander == bodyB and bodyA == self.env.moon):
+                self.env.agent_crashed[index] = False
+                self.env.dones[index] = False
+             
+        
+        # Check for leg-moon contacts
+        for lander_legs in self.env.legs:
+            for leg in lander_legs:
+                if (leg == bodyA and bodyB == self.env.moon) or \
+                   (leg == bodyB and bodyA == self.env.moon):
+                    leg.ground_contact = False
 
 class GymLunarLander(gym.Env, EzPickle):
     r"""
@@ -312,14 +327,15 @@ class GymLunarLander(gym.Env, EzPickle):
                 density=5.0,
                 friction=0.1,
                 categoryBits=0x0010,
-                #maskBits=0x001,  # collide only with ground
                 restitution=0.0,
-            ),  # 0.99 bouncy
+            ), 
         )
+
         lander.lander_x = lander_x
         lander.lander_y = lander_y
         lander.color1 = color1
         lander.color2 = color2
+        lander.allowSleep = False
         self.landers.append(lander)
 
 
@@ -640,31 +656,19 @@ class GymLunarLander(gym.Env, EzPickle):
 
         reward = 0
         if curr_agent == 0 or curr_agent == 2:
-            shaping = (
-                -200 * np.sqrt(state[0 + offset] * state[0 + offset] + state[1 + offset] * state[1 + offset])
-                - 25 * np.sqrt(state[2 + offset] * state[2 + offset] + state[3 + offset] * state[3 + offset])
-                #- 50 * abs(state[4 + offset])
-                + 10 * state[6 + offset]
-                + 10 * state[7 + offset]
-            )  # And ten points for legs contact, the idea is if you
-            # lose contact again after landing, you get negative reward
-            if self.shapings[curr_agent] is not None:
-                reward = shaping - self.shapings[curr_agent]
-            self.shapings[curr_agent] = shaping
+            
+            reward -= 10 * np.sqrt(state[0 + offset] * state[0 + offset] + state[1 + offset] * state[1 + offset])
+            reward -= 15 * np.sqrt(state[2 + offset] * state[2 + offset] + state[3 + offset] * state[3 + offset])
 
-            reward -= m_power * 0.30
-            reward -= s_power * 0.03
-            if not lander.awake:
-                self.dones[curr_agent] = True
-                #reward += 20
+            if state[6+offset] == True:
+                reward += .5
+            if state[7+offset] == True:
+                reward += .5
 
-        if self.agent_crashed[curr_agent] or abs(state[0 + offset]) >= 1.0 or abs(state[1 + offset]) >= 1.6:
-            self.dones[curr_agent] = True
-            self.agent_crashed[curr_agent] = False
-            reward -= 1
+        if abs(state[0 + offset]) >= 1.0 or abs(state[1 + offset]) >= 1.6:
+            reward -= 20
         
         terminated = False
-        #terminated = self.dones[0] and self.dones[2]
 
         if self.render_mode == "human":
             self.render()
